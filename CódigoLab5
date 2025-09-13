@@ -1,0 +1,141 @@
+// Universidad del Valle de Guatemala 
+// BE3029 - Electrónica Digital 2
+// Laboratorio 5 - Pantalla LCD
+// Marcela Castañeda - 23717
+// MCU: ESP32 dev kit 1.1
+
+// --------------- LIBRERÍAS --------------- //
+#include <Arduino.h>
+#include <stdint.h>
+#include <LiquidCrystal.h>
+
+// --------------- DEFINICIONES --------------- //
+//Pines para la pantalla LCD
+#define LCD_RS 21
+#define LCD_EN 22
+#define LCD_D4 19
+#define LCD_D5 18
+#define LCD_D6 5
+#define LCD_D7 17
+
+//Pines para potenciómetros
+#define POT1_PIN 34 
+#define POT2_PIN 35 
+
+// Pines de botones
+#define BTNINCRE 25 //Botón para incrementar
+#define BTNDDECRE 26 //Botón para disminuir
+
+// Antirrebote
+#define TiempoAntirrebote 200
+
+// --------------- VARIABLES GLOBALES --------------- //
+LiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
+
+// Variables para implementación de antirrebote del/los botones  
+volatile bool BTNINCRE_Pressed = false;
+volatile bool BTNDDECRE_Pressed = false;
+volatile uint32_t LastISR_BTNINCRE = 0;
+volatile uint32_t LastISR_BTNDDECRE = 0;
+
+//
+volatile uint8_t contador = 0;
+
+// ----------------- PROTOTIPOS DE FUNCIONES -------------------- //
+void initBTNINCRE(void);
+void initBTNDDECRE(void);
+void IRAM_ATTR ISR_BTNINCRE(void);
+void IRAM_ATTR ISR_BTNDDECRE(void);
+
+// ----------------- SETUP -------------------- //
+void setup() {
+  Serial.begin(115200);
+  lcd.setCursor(0, 0);
+
+  // Inicializar botones
+  initBTNINCRE();
+  initBTNDDECRE();
+}
+
+// ----------------- LOOP PRINCIPAL -------------------- //
+void loop() {
+  // Inicializar LCD
+  lcd.begin(16, 2);
+  lcd.clear(); 
+
+  //En la primera fila se imprimen los títulos o encabezados de cada potenciómetro y el contador
+  lcd.setCursor(0, 0);
+  lcd.print("POT1:");
+  lcd.setCursor(6, 0);
+  lcd.print("POT2:");
+  lcd.setCursor(12, 0);
+  lcd.print("CONT:");
+
+  //Lectura de valores analógicos de los potenciómetros
+  int crudoPot1 = analogRead(POT1_PIN);
+  int crudoPot2 = analogRead(POT2_PIN);
+
+  // Conversión del potenciómetro 2 a voltaje
+  float voltPot2 = (crudoPot2 * 3.3) / 4095.0;//El potenciómetro está alimentado a 3.3V
+
+  if (BTNINCRE_Pressed) {
+    if (contador == 255) contador = 0;//reinicia el contador a 0
+    else contador++;
+    BTNINCRE_Pressed = false;
+  }
+
+  if (BTNDDECRE_Pressed) {
+    if (contador == 0) contador = 255; //reincia a 255
+    else contador--;
+    BTNDDECRE_Pressed = false;
+  }
+
+  // POT1
+  lcd.setCursor(0, 1);
+  lcd.print("    "); 
+  lcd.setCursor(0, 1);
+  lcd.print(crudoPot1); 
+
+  // POT2
+  lcd.setCursor(6, 1);
+  lcd.print("     "); 
+  lcd.setCursor(6, 1);
+  lcd.print(voltPot2, 2);
+  lcd.print("V");
+
+  // CONTADOR
+  lcd.setCursor(12, 1);
+  lcd.print("   ");  
+  lcd.setCursor(12, 1);
+  lcd.print((int)contador);
+
+  delay(200); 
+}
+
+// ----------------- ISRs -------------------- //
+void IRAM_ATTR ISR_BTNINCRE(void) {
+  uint32_t tiempoActual = millis();
+  if (tiempoActual - LastISR_BTNINCRE > TiempoAntirrebote) {
+    BTNINCRE_Pressed = true;
+    LastISR_BTNINCRE = tiempoActual;
+  }
+}
+
+void IRAM_ATTR ISR_BTNDDECRE(void) {
+  uint32_t tiempoActual = millis();
+  if (tiempoActual - LastISR_BTNDDECRE > TiempoAntirrebote) {
+    BTNDDECRE_Pressed = true;
+    LastISR_BTNDDECRE = tiempoActual;
+  }
+}
+
+//Inicialización de botones
+void initBTNINCRE(void) {
+  pinMode(BTNINCRE, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(BTNINCRE), ISR_BTNINCRE, FALLING);
+}
+
+void initBTNDDECRE(void) {
+  pinMode(BTNDDECRE, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(BTNDDECRE), ISR_BTNDDECRE, FALLING);
+}
